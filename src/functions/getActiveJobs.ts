@@ -18,9 +18,29 @@ function getRedisClient(): Redis {
     return redisClient;
 }
 
-export async function getActiveJobs(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-    context.log(`Http function processed request for url "${request.url}"`);
+const GET_QUEUE_STATS_SCRIPT = `
+local prefix = 'hintr:'
+local queue_name = KEYS[1]
 
+-- Get pending jobs in queue
+local queue_length = redis.call('LLEN', prefix .. 'queue:' .. queue_name)
+
+-- Get all worker IDs for this queue
+local worker_ids = redis.call('SMEMBERS', prefix .. 'worker:id')
+
+-- Count workers with active tasks
+local active_count = 0
+for _, worker_id in ipairs(worker_ids) do
+    local task = redis.call('HGET', prefix .. 'worker:task', worker_id)
+    if task then
+        active_count = active_count + 1
+    end
+end
+
+return {queue_length, active_count}
+`;
+
+export async function getActiveJobs(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
     try {
         // 1. Validate queue name
         const queueName = request.query.get('queue');
@@ -40,15 +60,23 @@ export async function getActiveJobs(request: HttpRequest, context: InvocationCon
         // 2. Establish Redis connection
         const redis = getRedisClient();
 
-        // 3. Get the length of the queue
-        const keyQueue = "hintr:queue:" + queueName;
-        const queueLength = await redis.llen(keyQueue);
+        // 3. Execute Lua script to get queue stats atomically
+        const result = await redis.eval(
+            GET_QUEUE_STATS_SCRIPT,
+            1, // number of keys
+            queueName // KEYS[1]
+        ) as [number, number];
 
-        console.log(`queue length of ${keyQueue} is ${queueLength}`)
+        const [queueLength, activeWorkers] = result;
+        const totalJobs = queueLength + activeWorkers;
 
         return {
             status: 200,
-            body: JSON.stringify(queueLength),
+            body: JSON.stringify(
+                {
+                    'activeJobs': totalJobs
+                }
+            ),
             headers: {
                 'Content-Type': 'application/json'
             }
