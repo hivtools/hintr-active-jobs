@@ -44,6 +44,8 @@ export async function getActiveJobs(request: HttpRequest, context: InvocationCon
         const keyQueue = "hintr:queue:" + queueName;
         const queueLength = await redis.llen(keyQueue);
 
+        console.log(`queue length of ${keyQueue} is ${queueLength}`)
+
         return {
             status: 200,
             body: JSON.stringify(queueLength),
