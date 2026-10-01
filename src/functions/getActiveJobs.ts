@@ -25,15 +25,21 @@ local queue_name = KEYS[1]
 -- Get pending jobs in queue
 local queue_length = redis.call('LLEN', prefix .. 'queue:' .. queue_name)
 
--- Get all worker IDs for this queue
+-- Get all worker IDs (spans every queue, not just this one)
 local worker_ids = redis.call('SMEMBERS', prefix .. 'worker:id')
 
--- Count workers with active tasks
+-- Count workers with an active task on THIS queue. A worker can be claimed
+-- by (and hold a task for) any queue, so we must check which queue its
+-- claimed task actually belongs to before counting it here - otherwise a
+-- stuck task on an unrelated queue inflates every other queue's count too.
 local active_count = 0
 for _, worker_id in ipairs(worker_ids) do
     local task = redis.call('HGET', prefix .. 'worker:task', worker_id)
     if task then
-        active_count = active_count + 1
+        local task_queue = redis.call('HGET', prefix .. 'task:queue', task)
+        if task_queue == queue_name then
+            active_count = active_count + 1
+        end
     end
 end
 
