@@ -64,6 +64,21 @@ jobs:
           unzip release.zip
           rm release.zip
       
+      - name: Login to Azure (staging)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_STAGING }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B1105AD449F247658ED06579A238A0D3 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_1253215D41744AD9AE4929A473CC0EF0 }}
+
+      - name: 'Run Azure Functions Action (staging)'
+        uses: Azure/functions-action@v1
+        id: fa-staging
+        with:
+          app-name: 'nms-active-jobs'
+          slot-name: 'Production'
+          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
